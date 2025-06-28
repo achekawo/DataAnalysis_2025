@@ -1,0 +1,164 @@
+#--------------------start-------------------------------
+# Get current working directory
+getwd()
+
+# Install and load necessary packages
+# install.packages("PMCMRplus")
+# install.packages("coin")
+library(PMCMRplus)
+library(coin)  # Load the package containing perm.relation function
+library(dplyr) # For data manipulation
+
+#----------------read dataset--------------------------
+data <- read.csv("/Users/A138/Desktop/вуз/2. магистратура/2. data analysis/homework/Chulkova/Module 3/Practice 4/data_for_analysis.csv")
+summary(data)
+
+# Check for duplicate values in the dataset
+cat("Number of duplicates in Lipids1:", sum(duplicated(data$lipids1)), "\n")
+cat("Number of duplicates in Lipids2:", sum(duplicated(data$lipids2)), "\n")
+
+# Test for normality of distribution
+shapiro.test(data$lipids1)
+shapiro.test(data$lipids2)
+
+# Visualize distribution
+par(mfrow=c(1,2))
+hist(data$lipids1, main = "Histogram of Lipids1")  
+qqnorm(data$lipids1)
+qqline(data$lipids1)
+
+# Spearman's correlation test (handles warning about ties)
+spearman_result <- cor.test(data$lipids1, data$lipids2, method="spearman", exact = FALSE)
+print(spearman_result)
+
+# Create an empty data frame to store results
+results <- data.frame(
+  variable = character(),
+  spearman_corr = numeric(),
+  s_p_value = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# List of variables to analyze
+target_vars <- c("lipids2", "lipids3", "lipids4")
+
+# Main loop for Spearman correlation using permutation tests
+for (var in target_vars) {
+  # Use spearman_test from the coin package for permutation testing
+  perm_spearman <- spearman_test(
+    data$lipids1 ~ data[[var]],
+    distribution = approximate(B = 10000)  # Perform 10,000 permutations
+  )
+  # Store results
+  results <- rbind(results, data.frame(
+    variable = var,
+    spearman_corr = cor(data$lipids1, data[[var]], method = "spearman"),
+    s_p_value = pvalue(perm_spearman)
+  ))
+}
+
+# Output the final result table
+print(results)
+
+#------Visualization of significant correlation results---------
+data <- data[order(data$lipids1),]
+
+# Plot scatter plot with regression line
+plot(data$lipids1, data$lipids2, 
+     main = "Relationship between Lipids1 and Lipids2",
+     xlab = "Lipids1",
+     ylab = "Lipids2",
+     pch = 16,
+     col = rgb(0,0,1,0.5))
+
+# Add linear regression line
+lines(data$lipids1, predict(lm(lipids2 ~ lipids1, data = data)), col = "red", lwd = 2)
+
+# Add LOESS smoothing curve
+lines(data$lipids1, loess(lipids2 ~ lipids1, data = data)$fitted, col = "blue", lwd = 2, lty = 2)
+
+#_____________Regression Analysis________________ 
+
+df <- data
+df <- df[order(df$lipids1),]
+
+# Linear regression
+model_linear <- lm(lipids1 ~ lipids2, data = df)
+summary(model_linear)
+
+# Second-degree polynomial regression
+model_2 <- lm(lipids1 ~ poly(lipids2, 2, raw = TRUE), data = df)
+summary(model_2)
+
+# Third-degree polynomial regression
+model_3 <- lm(lipids1 ~ poly(lipids2, 3, raw = TRUE), data = df)
+summary(model_3)
+
+# Exponential regression (corrected to proper exponential model)
+model_exp <- lm(lipids1 ~ exp(lipids2), data = df)
+summary(model_exp)
+
+# Logarithmic regression (corrected to proper logarithmic model)
+model_log <- lm(lipids1 ~ log(lipids2), data = df)
+summary(model_log)
+
+# Compare models
+# Table of results
+rezult <- data.frame(
+  model = c("model_linear", "model_2", "model_3", "model_exp", "model_log"),
+  BIC_value = c(BIC(model_linear), BIC(model_2), BIC(model_3), BIC(model_exp), BIC(model_log)),
+  R_squared = c(summary(model_linear)$r.squared, 
+                summary(model_2)$r.squared, 
+                summary(model_3)$r.squared, 
+                summary(model_exp)$r.squared, 
+                summary(model_log)$r.squared)
+)
+
+# Sort by BIC value
+rezult <- rezult[order(rezult$BIC_value),]
+print(rezult)
+
+# __________Building graphs______________
+# Plot prediction curves for all models
+par(mfrow=c(2,3))
+
+# Scatter plot of original data
+plot(df$lipids2, df$lipids1, 
+     main = "Original Data", 
+     pch = 16, 
+     col = rgb(0,0,1,0.5))
+
+# Linear model
+plot(df$lipids2, df$lipids1, 
+     main = "Linear Model", 
+     pch = 16, 
+     col = rgb(0,0,1,0.5))
+lines(df$lipids2, predict(model_linear), col = "red", lwd = 2)
+
+# Quadratic polynomial model
+plot(df$lipids2, df$lipids1, 
+     main = "Quadratic Polynomial", 
+     pch = 16, 
+     col = rgb(0,0,1,0.5))
+lines(df$lipids2, predict(model_2), col = "blue", lwd = 2)
+
+# Cubic polynomial model
+plot(df$lipids2, df$lipids1, 
+     main = "Cubic Polynomial", 
+     pch = 16, 
+     col = rgb(0,0,1,0.5))
+lines(df$lipids2, predict(model_3), col = "green", lwd = 2)
+
+# Exponential model
+plot(df$lipids2, df$lipids1, 
+     main = "Exponential Model", 
+     pch = 16, 
+     col = rgb(0,0,1,0.5))
+lines(df$lipids2, predict(model_exp), col = "purple", lwd = 2)
+
+# Logarithmic model
+plot(df$lipids2, df$lipids1, 
+     main = "Logarithmic Model", 
+     pch = 16, 
+     col = rgb(0,0,1,0.5))
+lines(df$lipids2, predict(model_log), col = "orange", lwd = 2)
